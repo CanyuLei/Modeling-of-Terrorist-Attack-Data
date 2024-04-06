@@ -1,0 +1,678 @@
+---
+title: "FinalProject"
+author: "Canyu Lei"
+date: "`r Sys.Date()`"
+output:
+  word_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# set the path and load the data
+
+datadir <- "E:/UVA/学术/SYS6021/Final_Project"
+sourcedir <-"E:/UVA/学术/SYS6021/Final_Project"
+
+# load the data
+
+setwd(datadir)
+gt<-read.table('globalterroris_df.csv',header=T,sep=',')
+setwd(sourcedir)
+
+```
+
+##################################################
+
+Part1 : Introduction
+
+For the final project, I use the GTD(Global Terrorism Database), and I 'd like to detect which region has the most attacks and the most casualties, also find that some information related to attacks. Additionally, I want to detect whether there is a time series relationship in the attack data. 
+
+The research question I generated show as below:
+
+1. Detect which region/country has a higher number of terrorist attacks/casualties, in  recent 20 years and select the top 1 region and top 10 countries as research objects.
+
+2. Research question : Whether the effect of the region on casualties is significantly depend on whether it is a suicide attack.
+
+3. Research question : Whether the effect of the region on casualties is significantly depend on whether it is a suicide attack.
+
+4. Detect whether there is Time series relation ship in the data set.
+I will detect the trend, seasonality, auto-correlation.
+
+Motivation:
+
+I got the idea to analyze GTD because I came across an article about world terror attack data. I am a little curious whether there are some countries or regions that have extremely high numbers of terrorist attacks and casualties, and what factors have a significant impact on this situation. Do terrorist attacks around the world differ due to different attack types, weapon types and other factors? Considering that the national conditions of countries around the world are different, for example, many countries ban guns, but some allow residents to possess guns, so I wonder whether the casualties caused by terrorist attacks and the number of terrorist attacks will be significantly affected by such conditions.  Also, I'd like to know if there is some time series relationship to the number of terrorist attacks in an area. So maybe by analyzing the data, I can give some suggestions 
+
+#########################################################
+
+Part 2 generate the model and analyze the results.
+
+```{r}
+# load the libraries
+
+library(ggplot2)
+library(data.table)
+library(plyr)
+library(scales)
+library(grid)
+library(ggpubr)
+library(psych)
+library(car)
+library(here)
+library(dplyr)
+library(ggpubr)
+library(ggfortify)
+library(MASS)
+library(ade4)
+library(lindia)
+library(olsrr)
+library(car)
+library(forecast)
+library(mtsdi)
+library(tidyverse)
+library(lubridate)
+library(tseries)
+library(ggResidpanel)
+library(dplyr)
+library(lattice)
+
+```
+
+```{r}
+# clean the data
+
+# add new variable casualties nkill+nwound
+gt$casualties <- gt$nkill + gt$nwound
+
+# remove the attacks which casualties is "NA"
+xgtnd <- gt[which(gt$casualties != "NA"),]
+
+# add new variable count=1
+xgtnd$count <- 1
+
+# Remove duplicates 
+xgt <- xgtnd[!(duplicated(xgtnd[, c("iyear", "imonth", "iday", "country", "region", "suicide","attacktype1","weaptype1","targtype1","casualties")])),]
+rownames(xgt) <- NULL
+
+```
+
+***************************************************
+
+Task 1
+
+***************************************************
+
+Detect which country/region has the most attack accidents/casualties in recent 20 years(2001-2020)
+
+1.1 countries
+
+```{r}
+
+# calculate the casualties & count for each country
+
+xgt_country <- aggregate(xgt$count, by=list(country=xgt$country),sum)
+country_cas <- aggregate(xgt$casualties, by=list(country=xgt$country),sum)
+xgt_country$cas <- country_cas$x
+colnames(xgt_country)[2] = 'count'
+
+# sort and choose top 10 countries
+
+# when sorting , I consider casualties as the first order and count as the second
+
+sort_country <- arrange(xgt_country, cas, count)
+sort_country10 <- sort_country[160:169,]
+
+# generate the barplot of count and casualties in different countries
+
+# count
+xgt_country10 <- arrange(sort_country10, country)
+p1 <- barplot(xgt_country10$count,
+              names.arg = c('4','92','95','147','153','160','182','200','217','228'),
+              col = 'steelblue',
+              xlab = 'top 10 countries',
+              ylab = 'count',
+              main = 'Barplot of count of top 10 countries',
+              horiz = FALSE,
+              ylim = c(0, 30000)
+     )
+
+# casualties
+
+p2 <- barplot(xgt_country10$cas,
+              names.arg = c('4','92','95','147','153','160','182','200','217','228'),
+              col = 'orange',
+              xlab = 'top 10 countries',
+              ylab = 'casualties',
+              main = 'Barplot of casualties of different region',
+              horiz = FALSE,
+              ylim = c(0, 250000), 
+)
+
+ggarrange(p1, p2)
+
+```
+
+After sorting, we can find that the top 10 countries with highest casualties and attack number, the top 10 countries are 95(Iraq), 4(Afghanistan), 153(Pakistan), 92(India), 147(Nigeria), 200(Syria), 228(Yemen), 182(Somalia), 217(United States), 160(Philippines).
+
+There also are two barplots for casualties and attack number, the barplots show that the country with most attack is 95(Iraq), the country with most casualties caused by terroris is also 95(Iraq).
+
+1.2 regions 
+
+```{r}
+
+# calculate the casualties & count for each region
+
+xgt_region <- aggregate(xgt$count, by=list(region=xgt$region),sum)
+region_cas <-aggregate(xgt$casualties, by=list(region=xgt$region),sum)
+xgt_region$cas <- region_cas$x
+colnames(xgt_region)[2] = 'count'
+
+# sort, still cas as first order, count as the second
+
+sort_region <- arrange(xgt_region, cas, count)
+
+# generate the barplot of count and casualties in different region
+
+# count
+
+p1 <- barplot(xgt_region$count,
+        names.arg = c('1','2','3','4','5','6','7','8','9','10','11','12'),
+        col = 'steelblue',
+        xlab = 'region',
+        ylab = 'count',
+        #main = 'Barplot of count of different region',
+        horiz = FALSE,
+        ylim = c(0, 50000), 
+        )
+
+# casualties
+
+p2 <- barplot(xgt_region$cas,
+        names.arg = c('1','2','3','4','5','6','7','8','9','10','11','12'),
+        col = 'orange',
+        xlab = 'region',
+        ylab = 'casualties',
+        #main = 'Barplot of casualties of different region',
+        horiz = FALSE,
+        ylim = c(0, 350000), 
+)
+
+ggarrange(p1, p2)
+```
+
+After sorting, we can find that the region with highest casualties and attack number is 10(Middle East & North Africa), the second is 6(South Asia). 
+
+There also are two barplots for casualties and attack number, the barplots show that 6(South Asia) actually has a little bit more attacks than 10(Middle East & North Africa) but less casualties. However, since I considered casualties cause more damage, I put it in the first order and the number of attacks in the second. In that case, I choose 10(Middle East & North Africa) as the dangerous region.
+
+
+***********************************************
+
+Task 2
+
+***********************************************
+
+Research question : Whether the effect of the region on casualties is significantly depend on whether it is a suicide attack.
+
+Null hypothesis: There is no significant relation between region and suicide type in determining casualties.
+
+Alternative hypothesis: There is significant relation between region and suicide type in determining casualties.
+
+```{r}
+# use boxplot to visualize potential variable region
+xgt$region <- factor(xgt$region, levels = c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12))
+plot_region <- xgt %>%
+  ggplot(aes(y = log(casualties), x = region)) +
+  geom_boxplot() 
+
+ggarrange(plot_region)
+
+
+# use boxplot suicide or not
+xgt$suicide <- factor(xgt$suicide, levels = c(0, 1))
+plot_suicide <- xgt %>%
+  ggplot(aes(y = log(casualties), x = suicide)) +
+  geom_boxplot() 
+
+ggarrange(plot_suicide)
+
+
+# in this part we only use data with extreme casualties(casualties > 12)
+
+# Build a data frame with only extreme attacks for casualties
+xgtbox <- ggplot(xgt, aes(y=casualties)) + geom_boxplot()
+upper <- ggplot_build(xgtbox)$data[[1]]$ymax
+xxgt <- xgt[xgt$casualties > upper,]
+row.names(xxgt) <- NULL # very important
+
+# interaction plot
+
+# Plot interaction between region and suicide
+
+interaction.plot(xxgt$region, xxgt$suicide, log(xxgt$casualties))
+
+qplot(x = region, y = log(casualties), data = xxgt, colour = suicide) +
+  geom_smooth(method = "lm") 
+
+ggplot() +
+  aes(x = xxgt$region, y = log(xxgt$casualties), group = xxgt$suicide, color = xxgt$suicide) +
+  stat_summary(fun = mean, geom = "point") +
+  stat_summary(fun = mean, geom = "line") +
+  ylab("log of extreme casualties")+
+  xlab("") +
+  theme_bw() + 
+  labs(color = "") +
+  scale_y_continuous(labels = function(x) format(x, scientific = TRUE)) + 
+  ggtitle("Interaction of region and suicide on extreme casualties")
+
+
+# Detect whether the effect of the region on casualties is significantly depend on whether the attack is suicide.
+
+# build the MLR model
+
+# build the interaction model
+
+lm.cas2.inter <- lm(casualties~ region + suicide + region*suicide, data = xxgt)
+summary(lm.cas2.inter) # adj r2 0.01208
+
+# diagnose plots
+autoplot(lm.cas2.inter, which = 1:6, ncol = 2, label.size = 3) + theme_bw()
+
+# There are some outliers.
+
+# remove the outlier
+xxgt_rm1 <- xxgt[-c(1317,150),]
+
+lm.cas2.inter2 <- lm(casualties~ region + suicide + region*suicide, data = xxgt_rm1)
+summary(lm.cas2.inter2) # adj r2 = 0.02927
+
+autoplot(lm.cas2.inter2, which = 1:6, ncol = 2, label.size = 3) + theme_bw()
+
+# the diagnose plot shows bad qq
+
+# Use boxcox to transform response
+
+boxcox(lm.cas2.inter2)
+L <- boxcox(lm.cas2.inter2, plotit = F)$x[which.max(boxcox(lm.cas2.inter2, plotit = F)$y)]
+lm.cas2.inter2BC <- lm((casualties^L-1)/L ~ region + suicide + region*suicide, data = xxgt_rm1)
+summary(lm.cas2.inter2BC) # adj r2 = 0.06025
+
+autoplot(lm.cas2.inter2BC, which = 1:6, ncol = 2, label.size = 3) + theme_bw()
+
+# the diagnose plots looks all good
+
+# try backwards
+
+lm.cas2.inter2BC.step <- step(lm.cas2.inter2BC)
+summary(lm.cas2.inter2BC.step)
+
+# stepwise shows no change
+
+# choose the best model
+
+AIC(lm.cas2.inter)    # 142574.1
+AIC(lm.cas2.inter2)   # 121564.4
+AIC(lm.cas2.inter2BC) # -41574.46 
+
+# lm.cas.inter2BC shows the best AIC, and better adj r2
+
+# build the main effect model
+
+lm.cas2.main <- lm((casualties^L-1)/L~ region + suicide, data = xxgt_rm1)
+summary(lm.cas2.main)
+
+# compare it with the main effect model
+
+anova(lm.cas2.inter2BC, lm.cas2.main)
+
+```
+
+By using diagnose plot and AIC adj r^2 I choose the best model "lm.cas2.inter2BC". From the anova test we choose the big model and The interaction term of suicide and region in this model is significant, so we can reject the null hypothesis.  
+
+There is significant relationship between whether the attack is suicide and region in determining casualties.
+
+So, from the model "lm.cas2.inter2BC", I will suggest the government and local people may pay more attention on suicide attack, which will cause more casualties. 
+
+***********************************************
+
+Task 3
+
+***********************************************
+
+Research question : Whether the effect of the region on casualties is significantly depend on whether it is a suicide attack.
+
+Null hypothesis: There is no significant relation between region and suicide type in determining casualties.
+
+Alternative hypothesis: There is significant relation between region and suicide type in determining casualties.
+
+
+```{r}
+
+# target type and weapon type
+
+# generate boxplot for weapon type
+
+xxgt$weaptype1 <- factor(xxgt$weaptype1)
+plot_weaptype1 <- xxgt %>%
+  ggplot(aes(y = log(casualties), x = weaptype1)) +
+  geom_boxplot() 
+
+ggarrange(plot_weaptype1)
+
+# from the boxplot of weapon type for casualties, we can assume that 
+# weapon type 2 are more like to casue more casualties in one attack
+# so weapon 2 can be considered as a dangerous weapon type
+# I create another variable dmgweapon for weapon type 2
+# if weapon type is 2 dmgweapon == 1, otherwise dmgweapon == 0
+
+xxgt$dmgwpn <- as.numeric(xxgt$weaptype1 == 2) 
+
+# use boxplot for target type
+
+xxgt$targtype1 <- factor(xxgt$targtype1, 
+                         levels = c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
+                                    13, 14, 15, 16, 17, 18, 19, 20, 21, 22))
+plot_targtype1 <- xxgt %>%
+  ggplot(aes(y = log(casualties), x = targtype1)) +
+  geom_boxplot() 
+
+ggarrange(plot_targtype1)
+
+# I didn't see any significant difference between each target type
+
+# Maybe we can change the classification method
+# After reading the code book of the dataset, I decide to classify target type
+# classified as government organization; non-government organization; individual; other
+
+# create the dummy variable for each class
+
+# gov: 2-government, 3-police, 4-military, 7-government(dipolmatic)
+xxgt$tgt_gov <- as.numeric(xxgt$targtype1 == 2 | xxgt$targtype1 == 3 |
+                              xxgt$targtype1 == 4 | xxgt$targtype1 == 7)
+
+# non-gov: 5 6 8 9 11 12 15 21
+xxgt$tgt_nongov <- as.numeric(xxgt$targtype1 == 6 | xxgt$targtype1 == 8 |
+                                 xxgt$targtype1 == 9 | xxgt$targtype1 == 11 |
+                                 xxgt$targtype1 == 12 | xxgt$targtype1 == 15 |
+                                 xxgt$targtype1 == 21 | xxgt$targtype1 == 5)
+
+# individual: 1 10 14 18 19
+xxgt$tgt_indiv <- as.numeric(xxgt$targtype1 == 1 | xxgt$targtype1 == 10 |
+                                   xxgt$targtype1 == 14 | xxgt$targtype1 == 18 |
+                                   xxgt$targtype1 == 19)
+                                   
+# others: 13 16 17 20 22
+xxgt$tgt_other <- as.numeric(xxgt$targtype1 == 13 | xxgt$targtype1 == 16 |
+                                   xxgt$targtype1 == 17 | xxgt$targtype1 == 20 |
+                                   xxgt$targtype1 == 22)
+
+# build the MLR model
+
+# build the interaction model
+
+lm.cas3.inter <- lm(casualties~ dmgwpn + tgt_gov + tgt_nongov + tgt_indiv + tgt_other
+                    + dmgwpn*tgt_gov + dmgwpn*tgt_nongov + dmgwpn*tgt_indiv 
+                    + dmgwpn*tgt_other, data = xxgt)
+summary(lm.cas3.inter) # adj r2 = 0.002648
+
+# none of the interaction terms is significant at 0.05 level
+
+# generate the diagnose plot
+
+autoplot(lm.cas3.inter, which = 1:6, ncol = 2, label.size = 3) + theme_bw()
+
+# the diagnose plot shows tail-off qq-plot and some outliers
+
+# remove outliers
+
+xxgt_rm2 <- xxgt[-c(150, 7921),]
+
+# the model after removing
+
+lm.cas3.inter2 <- lm(casualties~ dmgwpn + tgt_gov + tgt_nongov + tgt_indiv + tgt_other
+                    + dmgwpn*tgt_gov + dmgwpn*tgt_nongov + dmgwpn*tgt_indiv 
+                    + dmgwpn*tgt_other, data = xxgt_rm2)
+summary(lm.cas3.inter2) # adj r2 = 0.01277 improved
+
+autoplot(lm.cas3.inter2, which = 1:6, ncol = 2, label.size = 3) + theme_bw()
+
+# the diagnose shows cook's became better, but still bad qq
+
+# Use boxcox to transform response
+
+boxcox(lm.cas3.inter2)
+L <- boxcox(lm.cas3.inter2, plotit = F)$x[which.max(boxcox(lm.cas3.inter2, plotit = F)$y)]
+lm.cas3.inter2BC <- lm((casualties^L-1)/L ~ dmgwpn + tgt_gov + tgt_nongov + tgt_indiv + tgt_other
+                       + dmgwpn*tgt_gov + dmgwpn*tgt_nongov + dmgwpn*tgt_indiv 
+                       + dmgwpn*tgt_other, data = xxgt_rm2)
+summary(lm.cas3.inter2BC) # adj r2 = 0.015
+
+# no significant interaction term
+
+autoplot(lm.cas3.inter2BC, which = 1:6, ncol = 2, label.size = 3) + theme_bw()
+
+# the diagnose plots looks all good
+
+# try backwards
+
+lm.cas3.inter2BC.step <- step(lm.cas3.inter2BC)
+summary(lm.cas3.inter2BC.step)
+
+# stepwise dropped all of the interaction terms
+
+# choose the best model
+
+AIC(lm.cas3.inter)    # 142685.5
+AIC(lm.cas3.inter2)   # 121273.1
+AIC(lm.cas3.inter2BC) # -41034.8 
+
+# lm.cas3.inter2BC shows the best AIC, and better adj r2
+
+# build the main effect model
+
+lm.cas3.main <- lm((casualties^L-1)/L~ dmgwpn + tgt_gov + 
+                     tgt_nongov + tgt_indiv + tgt_other,  data = xxgt_rm2)
+summary(lm.cas3.main)
+
+# compare it with the main effect model
+
+anova(lm.cas3.inter2BC, lm.cas3.main)
+
+```
+
+From diagnose plots, AIC adj r^2, I choose "lm.cas3.inter2BC" as the best model, but the interaction term seems not significant and anova test shows the small model is better. 
+Can't reject the null hypothesis, the small model(lm.cas3.main) is better
+
+The result shows that we can't reject the null hypothesis. So, there is no significant relationship between whether the weapon type is chemical and the Targets are classified by use in determining casualties
+
+
+******************************************
+
+Task 4
+
+******************************************
+
+In this part, I want to detect whether there is Time series relation ship in the data set.
+
+I just use one month as a time point, so I sum the number of attacks in every month from 2001 to 2020 in region 10( Middle East & North Africa)
+
+I will detect the trend, seasonality, auto-correlation.
+```{r}
+
+# only use the data which region is 10
+
+xgt_R10 <- xgt[which(xgt$region == 10),]
+dim(xgt_R10)
+
+# create a new data frame with only the number of attacks in every month
+
+R10_temp <- aggregate(xgt_R10$count, by=list(year=xgt_R10$iyear,
+                                                 month = xgt_R10$imonth ),sum)
+R10_temp2 <- arrange(R10_temp, year, month)
+
+R10_temp2$month.ts <- c(1:240)
+
+# create the time series data
+
+R10.ts <- ts(R10_temp2$x)
+
+# plot the time series data
+
+plot(R10.ts)
+```
+
+
+Task 4.1
+
+Detect the trend and seasonality of the data.
+
+```{r}
+# Task 4.1
+
+# Detect the trend and seasonality of the data
+
+time.R10 <- c(1:(length(R10.ts)))
+
+R10.trend <- lm(R10.ts~ time.R10)
+summary(R10.trend)
+
+# the model shows time is significant in predicting R10 data
+
+# Plot the trend line for R10.ts
+plot(R10.ts)
+abline(R10.trend,col='red')
+
+ggplot(R10_temp2, aes(x=month.ts,y=x)) + geom_line() + 
+  stat_smooth(method="lm",col="red") + ylab("attacks number")
+
+#Build a model R10.trendseason to model the trend and seasonality of R10
+
+R10.month <- time.R10 %% 12 
+R10.month <-as.factor(time.R10 %% 12) 
+
+R10.trendseason<-lm(R10.ts~ time.R10 + R10.month)
+summary(R10.trendseason) 
+
+# the result shows only time is significant, seasonality is not significant
+
+# plot ham.trendseason
+plot(R10.ts)
+lines(ts(R10.trendseason$fitted.values),col="red")
+
+```
+
+The model shows there is a trend in this time series data but no obvious seasonality.
+
+There are a lot of attacks around 2012 - 2016, a sharp increase around 2012, and then the big number kept for several years. I searched on wikipedia, it says that there are lots of wars during this period, for example, The Iraq insurgency started in late 2011, and in 2014 there was Gaza war, also there was an armed crisis in Syria in 2013. 
+
+From above, I think the super high casualties during this time can be attributed to the frequent wars in this region(Middle East & North Africa).
+
+
+Task 4.2
+
+Detect the autocorrelation of data
+
+```{r}
+
+# use acf() pacf() to see if there is autocorrelation
+
+p1 <- ggAcf(R10.ts)
+p2 <- ggPacf(R10.ts)
+
+ggarrange(p1,p2)
+
+# the acf plot shows a linear decay
+# the pacf plot shows exponential decay
+# so the data is not a stationary process and has a very strong autocorrelation
+
+# try first difference order
+
+R10.diff.acf <- ggAcf(diff(R10.ts))
+R10.diff.pacf <- ggPacf(diff(R10.ts))
+ggarrange(R10.diff.acf,R10.diff.pacf,nrow=2,ncol=1)
+
+# the acf plot looks better no significance after the 1st lag
+# the pacf become not siginificant after 2 lags
+# the process become stationary
+
+# use p, q terms for R10.ts based on acf and pacf plot
+
+# model ar(1) p=1 q=0
+
+R10.ar1 <- arima(R10.ts, order=c(1,0,0), include.mean=FALSE)
+summary(R10.ar1)
+
+# model ma(2) p=0, q=2
+
+R10.ma2 <- arima(R10.ts, order=c(0,0,2), include.mean=FALSE)
+summary(R10.ma2)
+
+# arma(1,2) p=1, q=2
+
+R10.arma12 <- arima(R10.ts, order=c(1,0,2), include.mean=FALSE)
+summary(R10.arma12)
+
+# auto choosed model
+
+R10.auto <- auto.arima(R10.ts, approximation=FALSE)
+summary(R10.auto)
+
+# based on AIC the best model is ARIMA(0, 1, 1)
+
+# diagnostics
+
+# esiduals vs. fitted
+model1 = ggplot() + geom_point(aes(x=fitted(R10.ar1), y=R10.ar1$residuals)) + ggtitle("AR1")
+model2 = ggplot() + geom_point(aes(x=fitted(R10.ma2), y=R10.ma2$residuals)) + ggtitle("MA2")
+model3 = ggplot() + geom_point(aes(x=fitted(R10.arma12), y=R10.arma12$residuals)) + ggtitle("ARMA12")
+model4 = ggplot() + geom_point(aes(x=fitted(R10.auto), y=R10.auto$residuals)) + ggtitle("Auto")
+
+ggarrange(model1, model2, model3, model4, ncol=2, nrow=2)
+
+# the plot of model 1,3,4 looks quiet same, the model2 is a little different
+# but they all shows no problem
+
+# assess normality of residuals
+
+model1 = qplot(sample=R10.ar1$residuals) + stat_qq_line(color="red") + ggtitle("AR1")
+model2 = qplot(sample=R10.ma2$residuals) + stat_qq_line(color="red") + ggtitle("MA2")
+model3 = qplot(sample=R10.arma12$residuals) + stat_qq_line(color="red") + ggtitle("ARMA12")
+model4 = qplot(sample=R10.auto$residuals) + stat_qq_line(color="red") + ggtitle("Auto")
+
+ggarrange(model1, model2, model3, model4, ncol=2, nrow=2)
+
+# all plots shows head-off and tail-off problem
+
+
+ggtsdiag(R10.auto,gof.lag=20)
+
+```
+
+The results show there is a auto-correlation in this time series data, and based on AIC the best model is ARIMA(0, 1, 1).
+
+from the Ljung-Box statistic plot ,for the 20 lags all the point is above blue line, we can't reject null hypothesis,the model is adequate up to lag 20.
+
+That's interesting! the number of Terrorist attacks in Iraq shows auto-correlation. 
+
+##################################################
+
+Part 3 : Summary
+
+In this project, I find out the top 10 countries with the most casualties and the top 1 region. 
+
+By using data with extreme casualties, I find that there is significant relationship between whether the attack is suicide and region in determining casualties. However, there is no significant relationship between whether the weapon type is chemical and the Targets are classified by use in determining casualties.
+
+What's more, I find the monthly number of attack is auto-correlation.
+Based on AIC, the best model for it is ARIMA(0, 1, 1).
+
+
+##################################################
+
+Part 4 : Acknowledge or Cite 
+
+Database : https://www.start.umd.edu/gtd/
+
+wikipedia : https://en.wikipedia.org/wiki/Iraqi_insurgency_(2011%E2%80%932013), https://en.wikipedia.org/wiki/2014_Gaza_War
+
